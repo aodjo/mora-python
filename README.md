@@ -54,7 +54,6 @@ for one in fetch_lyrics("영원은 그렇듯", "리도어"):
 
 ```
 vibe   33줄 → word        1.0
-melon  28줄 → word        1.0
 genie  28줄 → word        1.0
 bugs   28줄 → word        1.0
 flo    37줄 → word-approx 0.82
@@ -65,7 +64,7 @@ flo    37줄 → word-approx 0.82
 | | 어떻게 | 시각 가사 |
 |---|---|---|
 | `vibe` · `flo` | JSON API | vibe 만 |
-| `melon` · `bugs` · `genie` | 페이지 읽기 | genie 만 |
+| `bugs` · `genie` | 페이지 읽기 | genie 만 |
 
 열쇠는 필요 없습니다. 페이지를 읽는 쪽은 저쪽이 화면을 바꾸면 깨지는데, 그때는 **다른 곳이 받아 줍니다** — `fetch_lyrics` 는 한 곳이 막혀도 나머지로 갑니다.
 

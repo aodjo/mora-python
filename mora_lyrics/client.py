@@ -216,7 +216,7 @@ class Mora:
     def lyrics(self, title: str, artist: str | None = None, *, providers=None, timeout: float | None = None):
         """가사 글을 제공처에서 가져온다 — Mora 는 타이밍만 주기 때문이다.
 
-        bugs · flo · genie · melon · vibe 에 차례로 물어 **처음 받은 것**을 돌려준다. 여럿을
+        bugs · flo · genie · vibe 에 차례로 물어 **처음 받은 것**을 돌려준다. 여럿을
         견주고 싶으면 `fetch_lyrics()` 를 직접 쓴다.
 
         @param {str} title - 곡 이름.

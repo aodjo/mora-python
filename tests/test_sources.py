@@ -63,15 +63,15 @@ def test_raw_text_keeps_newlines_but_text_of_does_not():
 
 
 def test_a_label_span_does_not_become_part_of_the_title():
-    # melon·genie 의 제목 칸에는 「곡명」 같은 딱지가 같이 들어 있다.
+    # genie 의 제목 칸에는 「곡명」 같은 딱지가 같이 들어 있다.
     node = parse_html('<div class="song_name"><strong>곡명</strong>영원은 그렇듯</div>').first("div")
     assert node.own_text() == "영원은 그렇듯"
     assert "곡명" in text_of(node)
 
 
 def test_attributes_come_back_out_so_they_can_be_searched():
-    # melon 의 곡 번호는 `onClick="…goSongDetail('123')"` 안에 있다.
-    node = parse_html("<a onclick=\"melon.link.goSongDetail('33186501');\">곡정보</a>")
+    # 곡 번호가 `onClick="…goSongDetail('123')"` 처럼 속성에만 있는 화면이 있다.
+    node = parse_html("<a onclick=\"link.goSongDetail('33186501');\">곡정보</a>")
     assert "goSongDetail('33186501')" in _inner(node)
 
 

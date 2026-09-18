@@ -1,9 +1,9 @@
-"""가사를 제공처에서 가져온다 — bugs · flo · genie · melon · vibe.
+"""가사를 제공처에서 가져온다 — bugs · flo · genie · vibe.
 
 Mora 는 **타이밍만** 준다. 가사 글은 부르는 쪽이 들고 있어야 하는데, 그것을 어디서 구하느냐가
 매번 막히는 자리였다. 그래서 Mora 수집기가 쓰는 길을 그대로 옮겨 왔다.
 
-열쇠는 필요 없다. flo 와 vibe 는 JSON API 를 부르고, melon · bugs · genie 는 페이지를 읽는다.
+열쇠는 필요 없다. flo 와 vibe 는 JSON API 를 부르고, bugs · genie 는 페이지를 읽는다.
 페이지를 읽는 쪽은 저쪽이 화면을 바꾸면 깨진다 — 그때는 다른 제공처가 받아 준다.
 
 의존성은 없다. HTML 은 표준 `html.parser` 로 읽는다.
@@ -35,9 +35,6 @@ DEFAULT_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.3
 CRAWLER_UA = ("Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; "
               "+http://www.google.com/bot.html) Chrome/150.0.0.0 Safari/537.36")
 DEFAULT_TIMEOUT = 12.0
-#: Melon 은 검색 화면에서 제목을 못 읽으므로 후보의 상세 페이지를 열어 확인한다.
-#: 열 때마다 한 번씩 더 묻게 되므로 셋까지만 본다.
-MELON_TRIES = 3
 
 
 # ── 자료 ──────────────────────────────────────────────────────────────────
@@ -125,7 +122,7 @@ def pick_track(items: Sequence, wanted_title: str, wanted_artist: str | None,
     """Pick the search result most likely to be the song that was asked for.
 
     제목 일치를 **필수**로 한다. 모든 제공처가 검색 첫 항목을 검증 없이 집던 시절, genie 는
-    HOYO-MiX 게임 OST 질의에 Tyler, The Creator 의 「Window」를 돌려줬고 melon 은 라틴어 가사
+    HOYO-MiX 게임 OST 질의에 Tyler, The Creator 의 「Window」를 돌려줬고 어떤 곳은 라틴어 가사
     하나를 88곡에 붙였다. 관측된 오염은 전부 제목 불일치였다.
 
     가수는 **선호 신호로만** 쓴다. MusicBrainz 는 「IU」를 주고 한국 서비스는 「아이유」를
@@ -229,8 +226,8 @@ class Node:
     """A tag, what it carried, and what was inside it — **in the order it appeared**.
 
     글자와 자식 태그를 한 목록에 순서대로 담는다. 처음에는 글자를 한 칸에 모아 두었는데, 그러면
-    `가사<br>가사` 의 `<br>` 이 글 뒤로 밀려 줄바꿈이 통째로 사라졌다 — melon 가사가 한 줄로
-    뭉쳐 나온 것이 그 탓이다.
+    `가사<br>가사` 의 `<br>` 이 글 뒤로 밀려 줄바꿈이 통째로 사라졌다 — 스물여덟 줄짜리 가사가
+    한 줄로 뭉쳐 나온 것이 그 탓이다.
     """
 
     tag: str
@@ -390,48 +387,6 @@ def _query(title: str, artist: str | None) -> str:
 
 
 # ── 제공처 ────────────────────────────────────────────────────────────────
-
-
-def melon(title: str, artist: str | None = None, *, timeout: float = DEFAULT_TIMEOUT) -> Lyrics | None:
-    """Melon — 통합검색에서 곡을 고르고 상세 페이지에서 가사를 읽는다.
-
-    통합검색(total)만 결과를 서버에서 그려 준다. `song/index.htm` 은 JS 로 채워지므로 못 읽는다.
-
-    @param {str} title - Song name.
-    @param {str | None} artist - Performer, to tell covers apart.
-    @param {float} timeout - Seconds to wait per request.
-    @returns {Lyrics | None} The lyric, or None when this provider does not have it.
-    """
-    base = "https://www.melon.com"
-    head = {"Referer": f"{base}/"}
-    html = _get(f"{base}/search/total/index.htm?q={_query(title, artist)}&section=song",
-                timeout=timeout, headers=head)
-    #: 검색 결과에서 곡 번호만 뽑는다. 예전에는 `<tr>` 행마다 제목·가수가 함께 있었는데 화면이
-    #: `<li>` 로 바뀌면서 그 길이 끊겼다(2026-09 확인). 번호만 뽑고 제목은 **상세 페이지 제 것**을
-    #: 읽는 편이 화면이 또 바뀌어도 버틴다 — 대신 후보마다 한 번씩 더 묻게 되므로 셋까지만 본다.
-    seen: list[str] = []
-    for found in re.finditer(r"goSongDetail\('(\d+)'\)", html):
-        if found.group(1) not in seen:
-            seen.append(found.group(1))
-    for song_id in seen[:MELON_TRIES]:
-        detail = f"{base}/song/detail.htm?songId={song_id}"
-        page = parse_html(_get(detail, timeout=timeout, headers=head))
-        #: 제목 칸에는 「곡명」 같은 딱지 span 이 같이 있다. 그 마디의 **제 글자**만 읽는다.
-        holder = page.first("div", cls="song_name") or page.first("div", cls="songname")
-        found_title = (holder.own_text() if holder else "") or text_of(holder)
-        found_title = re.sub(r"^곡명\s*", "", found_title).strip()
-        singer = text_of(page.first("div", cls="artist"))
-        singer = re.sub(r"\s*-?\s*페이지 이동$", "", singer).strip()
-        if _affinity(found_title, title) == 0:
-            continue
-        holder = next((one for one in page.find(attr="id") if one.attrs.get("id") == "d_video_summary"), None) \
-            or page.first("div", cls="lyric")
-        lyrics = html_to_text(_outer(holder)) if holder else ""
-        if not lyrics:
-            continue
-        return Lyrics(provider="melon", lyrics=lyrics, title=found_title or title, artist=singer or artist,
-                      url=detail, track_id=song_id)
-    return None
 
 
 def bugs(title: str, artist: str | None = None, *, timeout: float = DEFAULT_TIMEOUT) -> Lyrics | None:
@@ -651,7 +606,7 @@ def suggest(title: str, artist: str | None = None, *, most: int = 8,
 
 #: 부르는 순서. 앞의 둘은 JSON API 라 잘 안 깨지므로 먼저 묻는다.
 PROVIDERS: dict[str, Callable[..., Lyrics | None]] = {
-    "vibe": vibe, "flo": flo, "melon": melon, "genie": genie, "bugs": bugs,
+    "vibe": vibe, "flo": flo, "genie": genie, "bugs": bugs,
 }
 
 
