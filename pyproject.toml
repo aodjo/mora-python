@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mora-lyrics"
+version = "0.2.0"
+description = "Mora 가사 타이밍 API 클라이언트 — 노래의 어느 순간에 어느 낱말이 불리는지"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "aodjo" }]
+keywords = ["lyrics", "karaoke", "alignment", "timing", "lrc", "subtitle"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Multimedia :: Sound/Audio",
+  "Typing :: Typed",
+]
+# 의존성이 없다. 가사 재생기를 만드는 사람이 이것 하나 때문에 requests 를 끌어오지 않게 한다.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/aodjo/mora-python"
+Source = "https://github.com/aodjo/mora-python"
+"Bug Tracker" = "https://github.com/aodjo/mora-python/issues"
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["mora_lyrics"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
