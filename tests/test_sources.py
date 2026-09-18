@@ -131,3 +131,37 @@ def test_a_providers_play_time_becomes_milliseconds():
     assert play_time(None) is None
     assert play_time("") is None
     assert play_time("모름") is None
+
+
+def test_suggest_falls_back_to_the_artist_when_the_title_is_misspelt():
+    # 「offically missing you」로는 저쪽 검색도 0건이다. 그때 가수로 물어야 그 곡이 보인다.
+    asked: list[str] = []
+
+    def fake(url, *, timeout, headers=None):
+        asked.append(url)
+        if "offically" in url:
+            return {"response": {"result": {"tracks": []}}}
+        return {"response": {"result": {"tracks": [
+            {"trackTitle": "Officially Missing You", "artists": [{"artistName": "긱스(Geeks)"}]}]}}}
+
+    import mora_lyrics.sources as sources
+    was, sources._get_json = sources._get_json, fake
+    try:
+        got = sources.suggest("offically missing you", "긱스")
+    finally:
+        sources._get_json = was
+    assert got == [("Officially Missing You", "긱스(Geeks)")]
+    assert len(asked) == 2, "제목으로 먼저 묻고, 없으면 가수로 다시 묻는다"
+
+
+def test_suggest_says_nothing_rather_than_guessing_when_search_is_down():
+    import mora_lyrics.sources as sources
+
+    def broken(url, *, timeout, headers=None):
+        raise OSError("망이 안 된다")
+
+    was, sources._get_json = sources._get_json, broken
+    try:
+        assert sources.suggest("아무 곡", "아무개") == []
+    finally:
+        sources._get_json = was

@@ -617,6 +617,38 @@ def vibe(title: str, artist: str | None = None, *, timeout: float = DEFAULT_TIME
                   url=f"https://vibe.naver.com/track/{track_id}", track_id=track_id, synced=tuple(synced))
 
 
+def suggest(title: str, artist: str | None = None, *, most: int = 8,
+            timeout: float = DEFAULT_TIMEOUT) -> list[tuple[str, str]]:
+    """제목이 안 맞을 때 「그 근처에 무엇이 있는지」 보여 주려고 그냥 검색만 해 본다.
+
+    가사를 고르는 규칙은 제목 일치를 필수로 한다 — 틀린 가사를 받느니 못 받는 편이 낫기
+    때문이다. 그런데 사람이 철자를 하나 틀린 것뿐일 때 「없다」고만 하면 무엇을 고쳐야 할지
+    알 수 없다. 이것은 **거르지 않은** 검색 결과다.
+
+    @param {str} title - 찾던 곡 이름.
+    @param {str | None} artist - 가수 이름.
+    @param {int} most - 몇 개까지 볼지.
+    @param {float} timeout - 기다릴 초.
+    @returns {list[tuple[str, str]]} (제목, 가수) 짝. 검색이 안 되면 빈 목록.
+    """
+    #: 제목에 오타가 있으면 저쪽 검색도 아무것도 못 준다 — 「offically missing you」로는 0건이다.
+    #: 그때는 **가수만으로** 다시 묻는다. 그 사람이 부른 곡 목록에 찾던 것이 대개 맨 위에 있다.
+    for query in ([_query(title, artist)] + ([_query(artist, None)] if artist else [])):
+        try:
+            found = _get_json(
+                f"https://apis.naver.com/vibeWeb/musicapiweb/v3/search/track"
+                f"?query={query}&start=1&display={most}&sort=RELEVANCE",
+                timeout=timeout, headers={"Referer": "https://vibe.naver.com/", "Accept": "application/json"})
+        except Exception:
+            continue
+        tracks = (((found or {}).get("response") or {}).get("result") or {}).get("tracks") or []
+        if tracks:
+            return [(one.get("trackTitle") or "",
+                     ", ".join(a.get("artistName") or "" for a in one.get("artists") or []))
+                    for one in tracks[:most]]
+    return []
+
+
 #: 부르는 순서. 앞의 둘은 JSON API 라 잘 안 깨지므로 먼저 묻는다.
 PROVIDERS: dict[str, Callable[..., Lyrics | None]] = {
     "vibe": vibe, "flo": flo, "melon": melon, "genie": genie, "bugs": bugs,
