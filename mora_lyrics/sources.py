@@ -63,6 +63,9 @@ class Lyrics:
     #: 산토리 자리에 아크라포빅 영상이 붙었던 일이 바로 그 검사가 없어서였다. JSON 제공처
     #: (vibe·flo)만 준다.
     duration_ms: int | None = None
+    #: 앨범 자켓 주소. 네 곳 모두 **이미 받아 오는 응답 안에** 들어 있어 요청이 늘지 않는다.
+    #: 크기는 제공처마다 다르다 — vibe 480 · genie 600 · bugs 200 · flo 는 가장 큰 것.
+    image_url: str | None = None
     #: 제공처가 시각까지 주면 채워진다. Mora 에 보낼 때는 안 쓰지만, 견주어 볼 수는 있다.
     synced: tuple[LyricLine, ...] = ()
 
@@ -85,6 +88,24 @@ class Suggestion(NamedTuple):
     #: None 이고, 그때는 제목만으로 가야 한다.
     duration_ms: int | None = None
     track_id: str | None = None
+    #: 앨범 자켓 주소. 검색 응답에 온 그대로다 — 크기 지정(`type=r480Fll`)도 손대지 않는다.
+    image_url: str | None = None
+
+
+def _image_at(src: str | None) -> str | None:
+    """Make an address written in a page usable on its own.
+
+    genie 는 자켓 주소를 `//image.genie.co.kr/…` 꼴로 준다 — 그대로는 못 받으므로 빠진 스킴만
+    채운다. 크기나 경로는 **건드리지 않는다**: 저쪽이 규칙을 바꾸면 우리가 지어낸 주소만 깨진다.
+
+    @param {str | None} src - The address as the page wrote it.
+    @returns {str | None} An address that can be fetched, or None when there was none.
+    """
+    if not src:
+        return None
+    if src.startswith("//"):
+        return f"https:{src}"
+    return src if src.startswith("http") else None
 
 
 # ── 고르기 ────────────────────────────────────────────────────────────────
@@ -426,7 +447,9 @@ def bugs(title: str, artist: str | None = None, *, timeout: float = DEFAULT_TIME
         if not name.strip():
             continue
         singer = row.first("p", cls="artist")
-        rows.append((row.attrs["trackid"], name.strip(), text_of(singer.first("a") if singer else singer)))
+        cover = row.first("img")
+        rows.append((row.attrs["trackid"], name.strip(), text_of(singer.first("a") if singer else singer),
+                     _image_at(cover.attrs.get("src") if cover else None)))
     best = pick_track(rows, title, artist, lambda one: (one[1], one[2]))
     if best is None:
         return None
@@ -440,7 +463,11 @@ def bugs(title: str, artist: str | None = None, *, timeout: float = DEFAULT_TIME
     lyrics = plain.raw_text().strip() if plain else html_to_text(_outer(holder))
     if not lyrics.strip():
         return None
+    #: 트랙 페이지의 `li.big` 이 200px 자켓이다. 검색 행의 것은 50px 이라 그 다음으로 친다.
+    big = page.first("li", cls="big")
+    cover = big.first("img") if big else None
     return Lyrics(provider="bugs", lyrics=lyrics.strip(), title=best[1] or title, artist=best[2] or artist,
+                  image_url=_image_at(cover.attrs.get("src") if cover else None) or best[3],
                   url=where, track_id=track_id)
 
 
@@ -464,8 +491,11 @@ def genie(title: str, artist: str | None = None, *, timeout: float = DEFAULT_TIM
         name = (link.own_text() if link else "") or (link.attrs.get("title", "").strip() if link else "")
         if not name:
             continue
+        #: 시각 가사가 있으면 상세 페이지를 안 열므로, 자켓은 **검색 행에서** 챙겨 두어야 한다.
+        cover = row.first("img")
         rows.append((row.attrs["songid"], name,
-                     text_of(row.first("a", cls="artist")), text_of(row.first("a", cls="albumtitle")) or None))
+                     text_of(row.first("a", cls="artist")), text_of(row.first("a", cls="albumtitle")) or None,
+                     _image_at(cover.attrs.get("src") if cover else None)))
     best = pick_track(rows, title, artist, lambda one: (one[1], one[2]))
     if best is None:
         return None
@@ -495,7 +525,7 @@ def genie(title: str, artist: str | None = None, *, timeout: float = DEFAULT_TIM
     if not lyrics.strip():
         return None
     return Lyrics(provider="genie", lyrics=plain_from(lyrics, synced), title=best[1] or title,
-                  artist=best[2] or artist, album=best[3], url=detail, track_id=song_id,
+                  artist=best[2] or artist, album=best[3], image_url=best[4], url=detail, track_id=song_id,
                   synced=tuple(synced))
 
 
@@ -533,8 +563,13 @@ def flo(title: str, artist: str | None = None, *, timeout: float = DEFAULT_TIMEO
     if not lyrics:
         return None
     credited = [one.get("name") or "" for one in (best.get("artistList") or []) if one.get("name")]
+    #: flo 만 크기별 주소를 목록으로 준다. 줄이는 것은 부르는 쪽이 할 수 있고 늘리는 것은 못 하므로
+    #: 가장 큰 것을 싣는다. 자리로 고르지 않고 **마지막**을 집어 목록이 길어져도 따라간다.
+    art = (meta.get("album") or {}).get("imgList") or (best.get("album") or {}).get("imgList") or []
     return Lyrics(provider="flo", lyrics=lyrics, title=meta.get("name") or best.get("name") or title,
                   artist=", ".join(credited) if credited else artist,
+                  album=(meta.get("album") or {}).get("title") or (best.get("album") or {}).get("title"),
+                  image_url=_image_at(art[-1].get("url") if art else None),
                   duration_ms=play_time(best.get("playTime") or meta.get("playTime")),
                   url=f"{base}/detail/track/{track_id}/detailinfo", track_id=track_id, synced=tuple(synced))
 
@@ -585,6 +620,7 @@ def vibe(title: str, artist: str | None = None, *, timeout: float = DEFAULT_TIME
     return Lyrics(provider="vibe", lyrics=lyrics, title=best.get("trackTitle") or title,
                   artist=", ".join(credited) if credited else artist,
                   album=(best.get("album") or {}).get("albumTitle"),
+                  image_url=_image_at((best.get("album") or {}).get("imageUrl")),
                   duration_ms=play_time(best.get("playTime")),
                   url=f"https://vibe.naver.com/track/{track_id}", track_id=track_id, synced=tuple(synced))
 
@@ -624,6 +660,8 @@ def suggest(title: str, artist: str | None = None, *, most: int = 8,
                 album=(one.get("album") or {}).get("albumTitle"),
                 duration_ms=play_time(one.get("playTime")),
                 track_id=None if one.get("trackId") is None else str(one["trackId"]),
+                #: 주소는 온 그대로 싣는다 — `type=r480Fll` 같은 크기 지정도 손대지 않는다.
+                image_url=_image_at((one.get("album") or {}).get("imageUrl")),
             ) for one in tracks[:most]]
     return []
 

@@ -160,7 +160,9 @@ def test_suggest_carries_the_album_length_and_id_it_already_has():
     def fake(url, *, timeout, headers=None):
         return {"response": {"result": {"tracks": [
             {"trackId": 55, "trackTitle": "영원은 그렇듯", "playTime": "03:57",
-             "artists": [{"artistName": "리도어(Redoor)"}], "album": {"albumTitle": "어떤 앨범"}}]}}}
+             "artists": [{"artistName": "리도어(Redoor)"}],
+             "album": {"albumTitle": "어떤 앨범",
+                       "imageUrl": "https://musicmeta-phinf.pstatic.net/album/005/187/5187500.jpg?type=r480Fll"}}]}}}
 
     import mora_lyrics.sources as sources
     was, sources._get_json = sources._get_json, fake
@@ -171,6 +173,35 @@ def test_suggest_carries_the_album_length_and_id_it_already_has():
     assert one.duration_ms == 237000
     assert one.album == "어떤 앨범"
     assert one.track_id == "55"
+    # 크기 지정(`type=r480Fll`)까지 온 그대로여야 한다. 고쳐 쓰면 저쪽이 규칙을 바꿀 때 우리만 깨진다.
+    assert one.image_url == "https://musicmeta-phinf.pstatic.net/album/005/187/5187500.jpg?type=r480Fll"
+
+
+def test_suggest_leaves_the_cover_empty_when_there_is_none():
+    # 앨범은 왔는데 그림이 없는 경우가 있다. 없는 것을 지어내지 않는다.
+    def fake(url, *, timeout, headers=None):
+        return {"response": {"result": {"tracks": [
+            {"trackTitle": "그림 없는 곡", "artists": [{"artistName": "아무개"}], "album": {"albumTitle": "어떤 앨범"}},
+            {"trackTitle": "앨범 없는 곡", "artists": [{"artistName": "아무개"}]}]}}}
+
+    import mora_lyrics.sources as sources
+    was, sources._get_json = sources._get_json, fake
+    try:
+        got = sources.suggest("그림 없는 곡")
+    finally:
+        sources._get_json = was
+    assert [one.image_url for one in got] == [None, None]
+    assert got[0].album == "어떤 앨범"
+
+
+def test_a_page_address_only_gets_the_scheme_it_is_missing():
+    # genie 는 `//image.genie.co.kr/…` 꼴로 준다. 그대로는 못 받으므로 빠진 스킴만 채운다.
+    from mora_lyrics.sources import _image_at
+    assert _image_at("//image.genie.co.kr/a_600x600.JPG") == "https://image.genie.co.kr/a_600x600.JPG"
+    assert _image_at("https://그림/a.jpg?type=r480Fll") == "https://그림/a.jpg?type=r480Fll"
+    assert _image_at("/상대/경로.jpg") is None
+    assert _image_at(None) is None
+    assert _image_at("") is None
 
 
 def test_suggest_leaves_the_length_empty_when_the_search_does_not_give_one():
