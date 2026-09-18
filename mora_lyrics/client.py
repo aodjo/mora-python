@@ -213,6 +213,23 @@ class Mora:
         body["fingerprint"] = fingerprint
         return self._post("/v1/align/fingerprint", body)
 
+    def lyrics(self, title: str, artist: str | None = None, *, providers=None, timeout: float | None = None):
+        """가사 글을 제공처에서 가져온다 — Mora 는 타이밍만 주기 때문이다.
+
+        bugs · flo · genie · melon · vibe 에 차례로 물어 **처음 받은 것**을 돌려준다. 여럿을
+        견주고 싶으면 `fetch_lyrics()` 를 직접 쓴다.
+
+        @param {str} title - 곡 이름.
+        @param {str | None} artist - 가수 이름. 같은 제목의 다른 곡을 가려낸다.
+        @param {Sequence[str] | None} providers - 물어볼 곳. 비우면 다섯 곳 모두.
+        @param {float | None} timeout - 한 요청이 기다릴 초. 비우면 이 클라이언트의 값.
+        @returns {Lyrics | None} 받은 가사. 아무 곳도 못 주면 None.
+        """
+        from .sources import fetch_lyrics
+        got = fetch_lyrics(title, artist, providers=providers,
+                           timeout=self.timeout if timeout is None else timeout, first=True)
+        return got[0] if got else None
+
     def health(self) -> bool:
         """@returns {bool} 서버가 살아 있는가."""
         try:

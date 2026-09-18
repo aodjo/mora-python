@@ -31,6 +31,46 @@ for line in got:
 | `mbid="…"` | MusicBrainz 녹음 id |
 | `artist=`, `title=`, `duration_ms=` | **길이가 필수입니다** — 같은 이름의 다른 녹음이 있습니다 |
 
+## 가사는 어디서
+
+Mora 는 **타이밍만** 줍니다. 가사 글은 부르는 쪽이 들고 있어야 하는데, 그것을 어디서 구하느냐가 매번 막히는 자리였습니다. 그래서 수집기가 쓰는 길을 그대로 넣었습니다.
+
+```python
+got = mora.lyrics("영원은 그렇듯", "리도어")       # 받은 첫 곳
+print(got.provider, got.lyrics)
+
+timed = mora.align(got.lyrics, artist=got.artist, title=got.title, duration_ms=237000)
+```
+
+여럿을 견주려면:
+
+```python
+from mora_lyrics import fetch_lyrics
+
+for one in fetch_lyrics("영원은 그렇듯", "리도어"):
+    timed = mora.align(one.lyrics, artist="리도어(Redoor)", title="영원은 그렇듯", duration_ms=237000)
+    print(one.provider, len(one.lyrics.splitlines()), "줄 →", timed.tier, round(timed.confidence, 3))
+```
+
+```
+vibe   33줄 → word        1.0
+melon  28줄 → word        1.0
+genie  28줄 → word        1.0
+bugs   28줄 → word        1.0
+flo    37줄 → word-approx 0.82
+```
+
+제공처마다 줄 나눔이 다릅니다. **그대로 보내도 붙고**, 얼마나 맞았는지가 `confidence` 로 드러납니다.
+
+| | 어떻게 | 시각 가사 |
+|---|---|---|
+| `vibe` · `flo` | JSON API | vibe 만 |
+| `melon` · `bugs` · `genie` | 페이지 읽기 | genie 만 |
+
+열쇠는 필요 없습니다. 페이지를 읽는 쪽은 저쪽이 화면을 바꾸면 깨지는데, 그때는 **다른 곳이 받아 줍니다** — `fetch_lyrics` 는 한 곳이 막혀도 나머지로 갑니다.
+
+곡을 고르는 규칙은 수집기 것을 그대로 옮겼습니다: **제목 일치는 필수**, 가수는 같은 제목이 여럿일 때 **우선 신호로만**. 가수 불일치로 버리면 「IU」와 「아이유」처럼 표기가 다른 정상 곡을 전부 잃기 때문입니다.
+
 ## 지금 부르는 줄
 
 ```python
