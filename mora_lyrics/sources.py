@@ -62,6 +62,10 @@ class Lyrics:
     album: str | None = None
     url: str | None = None
     track_id: str | None = None
+    #: 제공처가 말하는 곡 길이(ms). 이것이 있으면 엉뚱한 영상을 길이로 걸러낼 수 있다 —
+    #: 산토리 자리에 아크라포빅 영상이 붙었던 일이 바로 그 검사가 없어서였다. JSON 제공처
+    #: (vibe·flo)만 준다.
+    duration_ms: int | None = None
     #: 제공처가 시각까지 주면 채워진다. Mora 에 보낼 때는 안 쓰지만, 견주어 볼 수는 있다.
     synced: tuple[LyricLine, ...] = ()
 
@@ -182,6 +186,25 @@ def parse_lrc(lrc: str) -> list[LyricLine]:
             frac = int((fraction + "00")[:3]) if fraction else 0
             out.append(LyricLine((int(minute) * 60 + int(second)) * 1000 + frac, text))
     return sorted(out, key=lambda one: one.time_ms)
+
+
+def play_time(value: str | None) -> int | None:
+    """Read a provider's `03:57` into milliseconds.
+
+    vibe 와 flo 가 곡 길이를 이 꼴로 준다. 시(hour)까지 오는 곡도 있으므로 칸 수로 센다.
+
+    @param {str | None} value - The `mm:ss` or `hh:mm:ss` reading.
+    @returns {int | None} Milliseconds, or None when it is not a time.
+    """
+    if not value:
+        return None
+    parts = str(value).strip().split(":")
+    if not all(one.isdigit() for one in parts) or not 2 <= len(parts) <= 3:
+        return None
+    whole = 0
+    for one in parts:
+        whole = whole * 60 + int(one)
+    return whole * 1000
 
 
 def plain_from(plain: str | None, synced: Sequence[LyricLine] | None) -> str:
@@ -540,6 +563,7 @@ def flo(title: str, artist: str | None = None, *, timeout: float = DEFAULT_TIMEO
     credited = [one.get("name") or "" for one in (best.get("artistList") or []) if one.get("name")]
     return Lyrics(provider="flo", lyrics=lyrics, title=meta.get("name") or best.get("name") or title,
                   artist=", ".join(credited) if credited else artist,
+                  duration_ms=play_time(best.get("playTime") or meta.get("playTime")),
                   url=f"{base}/detail/track/{track_id}/detailinfo", track_id=track_id, synced=tuple(synced))
 
 
@@ -589,6 +613,7 @@ def vibe(title: str, artist: str | None = None, *, timeout: float = DEFAULT_TIME
     return Lyrics(provider="vibe", lyrics=lyrics, title=best.get("trackTitle") or title,
                   artist=", ".join(credited) if credited else artist,
                   album=(best.get("album") or {}).get("albumTitle"),
+                  duration_ms=play_time(best.get("playTime")),
                   url=f"https://vibe.naver.com/track/{track_id}", track_id=track_id, synced=tuple(synced))
 
 

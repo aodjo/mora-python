@@ -121,3 +121,13 @@ def _inner(node) -> str:
     """
     from mora_lyrics.sources import _outer
     return _outer(node)
+
+
+def test_a_providers_play_time_becomes_milliseconds():
+    # vibe·flo 가 「03:57」 꼴로 곡 길이를 준다. 이것이 있어야 엉뚱한 영상을 길이로 거를 수 있다.
+    from mora_lyrics.sources import play_time
+    assert play_time("03:57") == 237000
+    assert play_time("1:02:03") == 3723000       # 한 시간이 넘는 녹음
+    assert play_time(None) is None
+    assert play_time("") is None
+    assert play_time("모름") is None
