@@ -150,8 +150,45 @@ def test_suggest_falls_back_to_the_artist_when_the_title_is_misspelt():
         got = sources.suggest("offically missing you", "긱스")
     finally:
         sources._get_json = was
-    assert got == [("Officially Missing You", "긱스(Geeks)")]
+    assert [(one.title, one.artist) for one in got] == [("Officially Missing You", "긱스(Geeks)")]
     assert len(asked) == 2, "제목으로 먼저 묻고, 없으면 가수로 다시 묻는다"
+
+
+def test_suggest_carries_the_album_length_and_id_it_already_has():
+    # 검색 응답에 이미 들어 있는 값이다. 길이가 있어야 이 목록으로 고른 곡의 음원을 길이로 확인할
+    # 수 있다 — 산토리 자리에 아크라포빅 영상이 붙었던 일이 그 검사가 없어서였다.
+    def fake(url, *, timeout, headers=None):
+        return {"response": {"result": {"tracks": [
+            {"trackId": 55, "trackTitle": "영원은 그렇듯", "playTime": "03:57",
+             "artists": [{"artistName": "리도어(Redoor)"}], "album": {"albumTitle": "어떤 앨범"}}]}}}
+
+    import mora_lyrics.sources as sources
+    was, sources._get_json = sources._get_json, fake
+    try:
+        one = sources.suggest("영원은 그렇듯", "리도어")[0]
+    finally:
+        sources._get_json = was
+    assert one.duration_ms == 237000
+    assert one.album == "어떤 앨범"
+    assert one.track_id == "55"
+
+
+def test_suggest_leaves_the_length_empty_when_the_search_does_not_give_one():
+    # 길이를 지어내면 엉뚱한 음원을 「맞다」고 집는다. 모르면 모르는 채로 둔다.
+    def fake(url, *, timeout, headers=None):
+        return {"response": {"result": {"tracks": [
+            {"trackTitle": "길이 없는 곡", "artists": [{"artistName": "아무개"}]},
+            {"trackTitle": "이상한 길이", "playTime": "모름", "artists": [{"artistName": "아무개"}]}]}}}
+
+    import mora_lyrics.sources as sources
+    was, sources._get_json = sources._get_json, fake
+    try:
+        got = sources.suggest("길이 없는 곡")
+    finally:
+        sources._get_json = was
+    assert [one.duration_ms for one in got] == [None, None]
+    assert [one.album for one in got] == [None, None]
+    assert [one.track_id for one in got] == [None, None]
 
 
 def test_suggest_says_nothing_rather_than_guessing_when_search_is_down():

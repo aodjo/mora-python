@@ -17,7 +17,7 @@ from .client import DEFAULT_BASE_URL, VERSION, Ambiguous, Mora, MoraError, NotAl
 from .export import to_lrc, to_srt, to_vtt
 from .models import Alignment, Format, Line, Speaker, Tier, Token, Word
 from .playback import Moment, Playhead
-from .sources import PROVIDERS, Lyrics, LyricLine, fetch_lyrics, suggest
+from .sources import PROVIDERS, Lyrics, LyricLine, Suggestion, fetch_lyrics, suggest
 
 __version__ = VERSION
 
@@ -36,6 +36,7 @@ __all__ = [
     "PROVIDERS",
     "Playhead",
     "Speaker",
+    "Suggestion",
     "Tier",
     "Token",
     "Word",

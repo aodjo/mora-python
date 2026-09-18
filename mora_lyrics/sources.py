@@ -25,7 +25,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
-from typing import Callable, Iterable, Sequence
+from typing import Callable, Iterable, NamedTuple, Sequence
 
 DEFAULT_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
@@ -68,6 +68,23 @@ class Lyrics:
 
     def __str__(self) -> str:
         return self.lyrics
+
+
+class Suggestion(NamedTuple):
+    """검색만 해 본 결과 한 줄 — 가사는 안 딸려 온다.
+
+    이름을 짝으로 돌려주던 것을 이름 붙은 칸으로 바꾼 것이다. 튜플이라 `one[0]` 은 그대로
+    쓸 수 있지만, 칸이 둘에서 다섯으로 늘었으므로 `for title, artist in …` 는 안 된다.
+    """
+
+    title: str
+    artist: str
+    album: str | None = None
+    #: 제공처가 말하는 곡 길이(ms). 음원을 고를 때 제목으로 먼저 거르고 **이것으로 확인**한다 —
+    #: 산토리 자리에 아크라포빅 영상이 붙었던 일이 그 검사가 없어서였다. 검색이 길이를 안 주면
+    #: None 이고, 그때는 제목만으로 가야 한다.
+    duration_ms: int | None = None
+    track_id: str | None = None
 
 
 # ── 고르기 ────────────────────────────────────────────────────────────────
@@ -573,7 +590,7 @@ def vibe(title: str, artist: str | None = None, *, timeout: float = DEFAULT_TIME
 
 
 def suggest(title: str, artist: str | None = None, *, most: int = 8,
-            timeout: float = DEFAULT_TIMEOUT) -> list[tuple[str, str]]:
+            timeout: float = DEFAULT_TIMEOUT) -> list[Suggestion]:
     """제목이 안 맞을 때 「그 근처에 무엇이 있는지」 보여 주려고 그냥 검색만 해 본다.
 
     가사를 고르는 규칙은 제목 일치를 필수로 한다 — 틀린 가사를 받느니 못 받는 편이 낫기
@@ -582,9 +599,12 @@ def suggest(title: str, artist: str | None = None, *, most: int = 8,
 
     @param {str} title - 찾던 곡 이름.
     @param {str | None} artist - 가수 이름.
+    앨범·길이·곡 번호도 함께 싣는다. 검색 응답에 이미 들어 있는 값이라 더 물을 것이 없고,
+    길이가 있어야 이 목록으로 고른 곡의 음원을 길이로 확인할 수 있다.
+
     @param {int} most - 몇 개까지 볼지.
     @param {float} timeout - 기다릴 초.
-    @returns {list[tuple[str, str]]} (제목, 가수) 짝. 검색이 안 되면 빈 목록.
+    @returns {list[Suggestion]} 제목·가수·앨범·길이·곡 번호. 검색이 안 되면 빈 목록.
     """
     #: 제목에 오타가 있으면 저쪽 검색도 아무것도 못 준다 — 「offically missing you」로는 0건이다.
     #: 그때는 **가수만으로** 다시 묻는다. 그 사람이 부른 곡 목록에 찾던 것이 대개 맨 위에 있다.
@@ -598,9 +618,13 @@ def suggest(title: str, artist: str | None = None, *, most: int = 8,
             continue
         tracks = (((found or {}).get("response") or {}).get("result") or {}).get("tracks") or []
         if tracks:
-            return [(one.get("trackTitle") or "",
-                     ", ".join(a.get("artistName") or "" for a in one.get("artists") or []))
-                    for one in tracks[:most]]
+            return [Suggestion(
+                title=one.get("trackTitle") or "",
+                artist=", ".join(a.get("artistName") or "" for a in one.get("artists") or []),
+                album=(one.get("album") or {}).get("albumTitle"),
+                duration_ms=play_time(one.get("playTime")),
+                track_id=None if one.get("trackId") is None else str(one["trackId"]),
+            ) for one in tracks[:most]]
     return []
 
 
